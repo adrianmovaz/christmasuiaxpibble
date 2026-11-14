@@ -2,7 +2,6 @@
 """A tiny, dependency-free ASCII Christmas concert. Python 3.10+."""
 
 import argparse
-import colorsys
 import math
 import os
 from pathlib import Path
@@ -115,20 +114,28 @@ CAT = None
 DOG = None
 
 
-def palette(t):
-    base = (t * .075) % 1
+def palette():
+    # Neutral light preserves the meme colors at every point in the animation.
+    materials = {
+        "fur": (156, 143, 123),   # Ethel's warm gray-brown tabby coat.
+        "dog": (244, 232, 210),   # The pale cream pibble puppy.
+        "white": (255, 250, 240),
+        "pink": (228, 148, 155),
+        "red": (220, 30, 42),
+        "ink": (38, 34, 32),
+    }
     colors = {}
-    for material, shift, saturation in (("fur", 0, .65), ("dog", .13, .54),
-                                         ("white", .04, .16), ("pink", .87, .65),
-                                         ("red", .98 - base, .9), ("ink", .55, .3)):
+    for material, rgb in materials.items():
         colors[material] = []
         for level in range(32):
             value = .20 + .80 * level / 31
-            if material == "ink":
-                value *= .26
-            rgb = colorsys.hsv_to_rgb((base + shift) % 1, saturation, value)
-            colors[material].append("\x1b[38;2;%d;%d;%dm" % tuple(int(x * 255) for x in rgb))
+            colors[material].append("\x1b[38;2;%d;%d;%dm" % tuple(int(x * value) for x in rgb))
     return colors
+
+
+SHADES = palette()
+# Fixed front/upper light: the original opening frame's lighting direction.
+LIGHT = (0, .50 / math.hypot(.50, .75), .75 / math.hypot(.50, .75))
 
 
 def render(t, width, height, color=True):
@@ -142,10 +149,6 @@ def render(t, width, height, color=True):
         CAT, DOG = cat_model(detail), pibble_model(detail)
     grid = [[None] * width for _ in range(scene_height)]
     depth = [[-float("inf")] * width for _ in range(scene_height)]
-    shades = palette(t)
-    light = (math.sin(t * .8) * .75, .50, math.cos(t * .8) * .75)
-    light_length = math.sqrt(sum(v * v for v in light))
-    light = tuple(v / light_length for v in light)
 
     def draw(mesh, angle, offset, bob=0):
         c, s = math.cos(angle), math.sin(angle)
@@ -161,14 +164,14 @@ def render(t, width, height, color=True):
                 continue
             depth[py][px] = zz
             nx, nz = c * nx + s * nz, -s * nx + c * nz
-            diffuse = max(0, nx * light[0] + ny * light[1] + nz * light[2])
+            diffuse = max(0, nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2])
             shine = max(0, nz) ** 18 * .18
             brightness = min(1, .16 + diffuse * .72 + shine)
             level = int(brightness * 31)
             glyph = RAMP[min(len(RAMP) - 1, int(brightness * len(RAMP)))]
             if material == "ink":
                 glyph = "0"
-            grid[py][px] = (glyph, shades[material][level])
+            grid[py][px] = (glyph, SHADES[material][level])
 
     draw(CAT, t * 1.8, -1.45, .08 * math.sin(t * 5))
     singing = (math.sin(TAU * t / BEAT) + 1) / 2
