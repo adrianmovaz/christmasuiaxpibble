@@ -7,10 +7,12 @@ A spinning 3D meme cat and a singing, Santa-hat-wearing pibble in your terminal.
 Requires **Python 3.10+**. No Python packages to install.
 
 ```sh
-python3 christmas.py
+./run.sh
 ```
 
-Use a terminal with true-color support, a dark background, and a monospace font. Around **100 × 36** characters works well; enlarge the window or reduce the font size for more detail. The animation adapts when you resize the terminal. Press **Ctrl+C** to exit; the program restores your cursor and terminal screen.
+The launcher enables colors and plays the local `pibble.mp3`. You can also run `python3 christmas.py` directly to use the original synthesized music.
+
+Use a terminal with true-color support, a dark background, and a monospace font. Maximize the window and reduce the font size for more character cells: **160 × 50** or larger gives much more detail. Both animals fill the available space, and their surface sampling automatically increases at higher resolutions. The interface shows only the project title and exit hint. Press **Ctrl+C** to exit; the program restores your cursor and terminal screen.
 
 ## Music
 

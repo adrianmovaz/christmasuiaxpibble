@@ -20,8 +20,15 @@ RAMP = "il1tfLCG08MW"
 BEAT = 60 / 144
 
 
+class Mesh(list):
+    def __init__(self, detail=1.5):
+        super().__init__()
+        self.detail = detail
+
+
 def ellipsoid(mesh, center, radii, material="fur", density=28):
     """Sample an ellipsoid and its actual surface normals."""
+    density = round(density * getattr(mesh, "detail", 1))
     cx, cy, cz = center
     rx, ry, rz = radii
     for row in range(1, density):
@@ -38,6 +45,7 @@ def ellipsoid(mesh, center, radii, material="fur", density=28):
 
 
 def triangle(mesh, a, b, c, material="fur", density=25):
+    density = round(density * getattr(mesh, "detail", 1))
     ab = tuple(b[i] - a[i] for i in range(3))
     ac = tuple(c[i] - a[i] for i in range(3))
     n = (ab[1] * ac[2] - ab[2] * ac[1],
@@ -52,8 +60,8 @@ def triangle(mesh, a, b, c, material="fur", density=25):
             mesh.append((*p, *n, material))
 
 
-def cat_model():
-    mesh = []
+def cat_model(detail=1.5):
+    mesh = Mesh(detail)
     ellipsoid(mesh, (0, -.65, 0), (.61, .82, .48))
     ellipsoid(mesh, (0, .49, .04), (.82, .69, .64), density=40)
     for side in (-1, 1):
@@ -81,8 +89,8 @@ def cat_model():
     return mesh
 
 
-def pibble_model():
-    mesh = []
+def pibble_model(detail=1.5):
+    mesh = Mesh(detail)
     ellipsoid(mesh, (0, -.71, 0), (.76, .77, .49), "dog")
     ellipsoid(mesh, (0, .41, 0), (.93, .77, .60), "dog", 42)
     for side in (-1, 1):
@@ -125,10 +133,13 @@ def palette(t):
 
 def render(t, width, height, color=True):
     global CAT, DOG
-    if CAT is None:
-        CAT, DOG = cat_model(), pibble_model()
-    scene_height = height - 5
-    scale = min((width - 4) / 9.0, scene_height / 2.1)
+    scene_height = height - 2
+    # Keep the pair close together and fit their entire height, including the hat.
+    scale = min((width - 4) / 6.1, (scene_height - 2) / 1.95)
+    # Increase surface sampling with terminal resolution, caching until it changes.
+    detail = min(4, max(1.5, math.ceil(scale / 18 * 2) / 2))
+    if CAT is None or CAT.detail != detail:
+        CAT, DOG = cat_model(detail), pibble_model(detail)
     grid = [[None] * width for _ in range(scene_height)]
     depth = [[-float("inf")] * width for _ in range(scene_height)]
     shades = palette(t)
@@ -143,7 +154,7 @@ def render(t, width, height, color=True):
             # Slight perspective makes the near ear and paw larger.
             perspective = 6 / (6 - zz)
             px = int(width / 2 + (offset + xx * perspective) * scale)
-            py = int(scene_height * .49 - (y * perspective + bob) * scale * .5)
+            py = int(scene_height * .5 - (y * perspective + bob - .23) * scale * .5)
             if not (0 <= px < width and 0 <= py < scene_height):
                 continue
             if zz <= depth[py][px]:
@@ -159,17 +170,17 @@ def render(t, width, height, color=True):
                 glyph = "0"
             grid[py][px] = (glyph, shades[material][level])
 
-    draw(CAT, t * 1.8, -2.13, .08 * math.sin(t * 5))
+    draw(CAT, t * 1.8, -1.45, .08 * math.sin(t * 5))
     singing = (math.sin(TAU * t / BEAT) + 1) / 2
-    mouth = []
+    mouth = Mesh(detail)
     ellipsoid(mouth, (0, -.10 - singing * .08, .62),
               (.27, .09 + singing * .20, .12), "ink", 18)
     ellipsoid(mouth, (0, -.19 - singing * .15, .73),
               (.14, .035 + singing * .055, .035), "pink", 12)
     dog_angle = .19 * math.sin(t * 2.2)
     dog_bob = .065 * math.sin(TAU * t / BEAT)
-    draw(DOG, dog_angle, 2.13, dog_bob)
-    draw(mouth, dog_angle, 2.13, dog_bob)
+    draw(DOG, dog_angle, 1.45, dog_bob)
+    draw(mouth, dog_angle, 1.45, dog_bob)
 
     # Deterministic snowfall: never changes the user's global random state.
     rng = random.Random(1225)
@@ -182,9 +193,9 @@ def render(t, width, height, color=True):
     def centered(text):
         return text[:width].center(width)
 
-    header = centered("U I I A   x   P I B B L E  |  CHRISTMAS CONCERT")
-    lines = [("\x1b[38;2;255;212;130m" if color else "") + header]
-    lines.append(centered("3D ASCII  /  rainbow lights  /  festive vibes"))
+    header = centered("UIIA x PIBBLE")
+    lines = [("\x1b[38;2;255;212;130m" if color else "") + header
+             + ("\x1b[0m" if color else "")]
     for row in grid:
         line, previous = [], None
         for cell in row:
@@ -194,15 +205,7 @@ def render(t, width, height, color=True):
                 previous = ink
             line.append(glyph)
         lines.append("".join(line) + ("\x1b[0m" if color else ""))
-    left, right = "UIIA " + ("ui " * (1 + int(t * 4) % 3)), ["AWOOO", "BORK", "WOOO", "AROO"][int(t / BEAT) % 4]
-    labels = [" "] * width
-    for text, fraction in ((left, .265), ("PIBBLE: " + right, .735)):
-        start = max(0, int(width * fraction) - len(text) // 2)
-        for i, ch in enumerate(text):
-            if start + i < width:
-                labels[start + i] = ch
-    lines.extend(["".join(labels), centered("o  0  o  HAPPY HOWL-IDAYS  o  0  o"),
-                  centered("Ctrl+C to exit")])
+    lines.append(centered("Ctrl+C to exit"))
     return "\n".join(lines)
 
 
