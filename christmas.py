@@ -17,6 +17,7 @@ import wave
 TAU = math.tau
 RAMP = "il1tfLCG08MW"
 BEAT = 60 / 144
+TREE_TIERS = ((-1.25, .90, 1.65), (-.25, 1.85, 1.25), (.75, 2.80, .85))
 
 
 class Mesh(list):
@@ -110,8 +111,52 @@ def pibble_model(detail=1.5):
     return mesh
 
 
+def tree_model(detail=1.5):
+    mesh = Mesh(detail)
+    ellipsoid(mesh, (0, -1.45, 0), (.22, .45, .22), "wood", 16)
+    # Overlapping cones give the evergreen its tiered silhouette.
+    for bottom, top, radius in TREE_TIERS:
+        rows = round(36 * detail)
+        slope = radius / (top - bottom)
+        length = math.sqrt(1 + slope * slope)
+        for row in range(rows + 1):
+            fraction = row / rows
+            y = bottom + (top - bottom) * fraction
+            r = radius * (1 - fraction)
+            for col in range(rows * 3):
+                angle = TAU * col / (rows * 3)
+                c, s = math.cos(angle), math.sin(angle)
+                mesh.append((r * c, y, r * s,
+                             c / length, slope / length, s / length, "pine"))
+        # Decorate every side so ornaments remain visible as the tree turns.
+        for i in range(8):
+            angle = .45 + i * TAU / 8
+            fraction = .24 + .13 * (i % 2)
+            r = radius * (1 - fraction)
+            ellipsoid(mesh, (r * math.cos(angle),
+                             bottom + (top - bottom) * fraction,
+                             r * math.sin(angle)),
+                      (.10, .10, .10), "red" if i % 2 else "gold", 10)
+    # Give the star a back and edges so it also catches light as it turns.
+    points = []
+    for i in range(10):
+        angle = math.pi / 2 + i * math.pi / 5
+        radius = .27 if i % 2 == 0 else .12
+        points.append((radius * math.cos(angle),
+                       3.0 + radius * math.sin(angle), .08))
+    for i in range(10):
+        a, b = points[i], points[(i + 1) % 10]
+        back_a, back_b = (*a[:2], -.08), (*b[:2], -.08)
+        triangle(mesh, (0, 3.0, .08), a, b, "gold", 10)
+        triangle(mesh, (0, 3.0, -.08), back_b, back_a, "gold", 10)
+        triangle(mesh, a, back_a, back_b, "gold", 6)
+        triangle(mesh, a, back_b, b, "gold", 6)
+    return mesh
+
+
 CAT = None
 DOG = None
+TREE = None
 
 
 def palette():
@@ -123,6 +168,9 @@ def palette():
         "pink": (228, 148, 155),
         "red": (220, 30, 42),
         "ink": (38, 34, 32),
+        "pine": (38, 132, 66),
+        "wood": (116, 75, 43),
+        "gold": (255, 204, 65),
     }
     colors = {}
     for material, rgb in materials.items():
@@ -134,12 +182,46 @@ def palette():
 
 
 SHADES = palette()
-# Fixed front/upper light: the original opening frame's lighting direction.
-LIGHT = (0, .50 / math.hypot(.50, .75), .75 / math.hypot(.50, .75))
+# Fixed upper-left light gives curved surfaces a clear lit and shaded side.
+LIGHT = tuple(v / math.sqrt(.70 ** 2 + .65 ** 2 + .80 ** 2)
+              for v in (-.70, .65, .80))
+# Blinn halfway vector between the light and the camera, looking along +Z.
+_half = (LIGHT[0], LIGHT[1], LIGHT[2] + 1)
+HALF_LIGHT = tuple(v / math.sqrt(sum(x * x for x in _half)) for v in _half)
+
+
+def surface_brightness(nx, ny, nz, material, visibility=1):
+    """Shade a rotated surface normal with neutral, stationary lighting."""
+    diffuse = max(0, nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2])
+    highlight = max(0, nx * HALF_LIGHT[0] + ny * HALF_LIGHT[1]
+                    + nz * HALF_LIGHT[2]) ** 24
+    gloss = .015 if material == "pine" else (.04 if material in ("fur", "dog") else .14)
+    if diffuse == 0:
+        highlight = 0
+    # Low ambient fill keeps shadow detail visible without washing it out.
+    return min(1, .09 + visibility * (.86 * diffuse + gloss * highlight))
+
+
+def tree_shadow(x, y, z):
+    """Soft shadows cast by the solid branch tiers toward the fixed light."""
+    visibility = 1.0
+    for bottom, _, radius in TREE_TIERS:
+        distance = bottom - y
+        if distance <= .015:
+            continue
+        # Where the ray to the light crosses the underside of this tier.
+        ray_x = x + LIGHT[0] * distance / LIGHT[1]
+        ray_z = z + LIGHT[2] * distance / LIGHT[1]
+        edge = math.hypot(ray_x, ray_z) - radius
+        softness = .10 + distance * .10
+        blend = max(0, min(1, .5 + edge / (2 * softness)))
+        blend = blend * blend * (3 - 2 * blend)
+        visibility = min(visibility, .22 + .78 * blend)
+    return visibility
 
 
 def render(t, width, height, color=True):
-    global CAT, DOG
+    global CAT, DOG, TREE
     scene_height = height - 2
     # Keep the pair close together and fit their entire height, including the hat.
     scale = min((width - 4) / 6.1, (scene_height - 2) / 1.95)
@@ -147,32 +229,36 @@ def render(t, width, height, color=True):
     detail = min(4, max(1.5, math.ceil(scale / 18 * 2) / 2))
     if CAT is None or CAT.detail != detail:
         CAT, DOG = cat_model(detail), pibble_model(detail)
+        TREE = tree_model(detail)
     grid = [[None] * width for _ in range(scene_height)]
     depth = [[-float("inf")] * width for _ in range(scene_height)]
 
-    def draw(mesh, angle, offset, bob=0):
+    def draw(mesh, angle, offset, bob=0, z_offset=0, size=1):
         c, s = math.cos(angle), math.sin(angle)
         for x, y, z, nx, ny, nz, material in mesh:
             xx, zz = c * x + s * z, -s * x + c * z
+            # Trace tree shadows in rotated coordinates toward the fixed light.
+            shadow_x, shadow_z = xx, zz
+            xx, zz = xx * size, zz * size + z_offset
             # Slight perspective makes the near ear and paw larger.
             perspective = 6 / (6 - zz)
             px = int(width / 2 + (offset + xx * perspective) * scale)
-            py = int(scene_height * .5 - (y * perspective + bob - .23) * scale * .5)
+            py = int(scene_height * .5 - (y * size * perspective + bob - .23) * scale * .5)
             if not (0 <= px < width and 0 <= py < scene_height):
                 continue
             if zz <= depth[py][px]:
                 continue
             depth[py][px] = zz
             nx, nz = c * nx + s * nz, -s * nx + c * nz
-            diffuse = max(0, nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2])
-            shine = max(0, nz) ** 18 * .18
-            brightness = min(1, .16 + diffuse * .72 + shine)
+            visibility = tree_shadow(shadow_x, y, shadow_z) if mesh is TREE else 1
+            brightness = surface_brightness(nx, ny, nz, material, visibility)
             level = int(brightness * 31)
             glyph = RAMP[min(len(RAMP) - 1, int(brightness * len(RAMP)))]
             if material == "ink":
                 glyph = "0"
             grid[py][px] = (glyph, SHADES[material][level])
 
+    draw(TREE, t * .35, 0, z_offset=-5.5, size=.9)
     draw(CAT, t * 1.8, -1.45, .08 * math.sin(t * 5))
     singing = (math.sin(TAU * t / BEAT) + 1) / 2
     mouth = Mesh(detail)
@@ -187,7 +273,7 @@ def render(t, width, height, color=True):
 
     # Deterministic snowfall: never changes the user's global random state.
     rng = random.Random(1225)
-    for i in range(max(12, width // 3)):
+    for i in range(max(18, width // 2)):
         x = int((rng.random() * width + math.sin(t + i) * 2) % width)
         y = int((rng.random() * scene_height + t * (1 + i % 3)) % scene_height)
         if grid[y][x] is None:

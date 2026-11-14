@@ -1,6 +1,6 @@
 # Uiia × Pibble Christmas Concert
 
-A spinning 3D meme cat and a singing, Santa-hat-wearing pibble in your terminal. Like the spinning ASCII donut, the characters are made of lit 3D surfaces, drawn with **letters and numbers**. Fixed neutral lighting keeps the cat's warm gray-brown coat, the pibble's cream fur, and the red-and-white Santa hat consistent as the animals move. A depth buffer, snowfall, a curled cat tail, and an animated dog mouth complete the concert.
+A spinning 3D meme cat and a singing, Santa-hat-wearing pibble in your terminal. Like the spinning ASCII donut, the characters are made of lit 3D surfaces, drawn with **letters and numbers**. Fixed neutral lighting from above-left gives the animals clear highlights and shaded sides while keeping the cat's warm gray-brown coat, the pibble's cream fur, and the red-and-white Santa hat consistent as they move. A smaller decorated evergreen with a gold star slowly rotates farther behind the pair; its shading and soft branch shadows respond to the fixed light as it turns. Gently falling snow, a depth buffer, a curled cat tail, and an animated dog mouth complete the concert.
 
 ## Run
 
