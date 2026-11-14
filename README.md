@@ -28,21 +28,6 @@ Commercial recordings are not included or downloaded. A custom song loops, while
 
 Audio uses the first installed compatible command: macOS's built-in `afplay`, `ffplay` (FFmpeg), `play` (SoX), or `aplay` (WAV only). On Linux or Windows, install one of those players for sound. If no player is available or playback fails, the animation continues silently. Playback runs locally and stops when you exit.
 
-## Options
 
-```sh
-python3 christmas.py --no-audio             # silent mode
-python3 christmas.py --fps 30               # 1–60 FPS; default 24
-python3 christmas.py --plain                # letters and numbers without color
-python3 christmas.py --width 120 --height 40
-python3 christmas.py --frames 120 --no-audio # short animated preview
-python3 christmas.py --help
-```
-
-`NO_COLOR` also disables colors. Redirected output automatically becomes a single plain-text frame unless `--frames` is specified:
-
-```sh
-python3 christmas.py --width 100 --height 36 > preview.txt
-```
 
 The renderer, original music synthesizer, and audio lifecycle are all in `christmas.py`, using only the Python standard library. The animals are stylized 3D approximations of the memes.
